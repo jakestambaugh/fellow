@@ -1,11 +1,24 @@
 use std::error::Error;
 use std::fmt::{self, Display};
-use std::path::PathBuf;
+
+mod scanner;
+mod token;
+
+use crate::scanner::scan;
+use crate::token::{Token, TokenContext};
+
+#[derive(Debug)]
+pub struct ScanError {
+    _message: String,
+    _line: usize,
+    _position: usize,
+}
 
 #[derive(Debug)]
 pub enum FellowError {
     CannotReadFile,
     InterpreterError,
+    ScanError(ScanError),
 }
 
 impl Error for FellowError {}
@@ -16,16 +29,12 @@ impl fmt::Display for FellowError {
     }
 }
 
-pub fn read_source_code(path: &PathBuf) -> Result<String, FellowError> {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => Ok(contents),
-        Err(_err) => Err(FellowError::CannotReadFile),
-    }
-}
-
 pub enum FellowValue {
     Int(i64),
     String(String),
+    Identifier(String),
+    Boolean(bool),
+    Nil,
 }
 
 impl Display for FellowValue {
@@ -33,23 +42,28 @@ impl Display for FellowValue {
         match self {
             Self::Int(i) => write!(f, "{:?}", i),
             Self::String(s) => write!(f, "{}", s),
+            Self::Identifier(s) => write!(f, "{}", s),
+            Self::Boolean(b) => write!(f, "{:?}", b),
+            Self::Nil => write!(f, "nil"),
         }
     }
 }
 
 // Pipeline for our interpreter
-pub fn interpret(source_code: String) -> Result<FellowValue, FellowError> {
-    let tokens = source_code.split_whitespace();
-    match tokens.last() {
+pub fn interpret(source_code: &str) -> Result<FellowValue, FellowError> {
+    let tokens = scan(source_code)?;
+    match tokens.into_iter().last() {
         Some(v) => Ok(parse_token(v)),
         None => Err(FellowError::InterpreterError),
     }
 }
 
-fn parse_token(token: &str) -> FellowValue {
-    if let Ok(i) = token.parse::<i64>() {
-        FellowValue::Int(i)
-    } else {
-        FellowValue::String(token.to_string())
+fn parse_token(token_context: TokenContext) -> FellowValue {
+    match token_context.token {
+        Token::True => FellowValue::Boolean(true),
+        Token::False => FellowValue::Boolean(false),
+        Token::String(s) => FellowValue::String(s.clone()),
+        Token::Number(i) => FellowValue::Int(i.clone().parse().unwrap()),
+        _ => FellowValue::Nil,
     }
 }

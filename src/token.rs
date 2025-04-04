@@ -48,6 +48,10 @@ pub enum Token {
     While,
 
     EndOfFile,
+    Space,
+    Tab,
+    NewLine,
+    CarriageReturn,
 }
 
 // The value and position of the token from the source code

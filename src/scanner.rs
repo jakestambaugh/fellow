@@ -60,19 +60,32 @@ impl<'a> ScanState<'a> {
     }
 
     // Advances the scanner and emits the next token
-    fn scan_token(&mut self) -> Result<Option<TokenContext>, FellowError> {
+    //
+    // I originally tried to follow the pattern in Crafting Interpreters where the lexer skips
+    // certain characters like newlines and comments without tokenizing them. However, this meant
+    // that the scan_token function was becoming very "mulit-modal" in its return structure.
+    // It could return:
+    // * A successfully parsed Token
+    // * An error, most likely due to malformed input
+    // * A "successful" None value in cases where the next set of characters represented a
+    // non-token.
+    //
+    // Instead of this pattern, I decided to just create more types of Tokens and tokenize every
+    // character in the input, including whitespace. In the end, this will give me more flexibility
+    // down the road to make whitespace-sensitive grammar.
+    fn scan_token(&mut self) -> Result<TokenContext, FellowError> {
         let c = self.next();
         match c {
-            "(" => Ok(Some(self.contextualize(Token::LeftParen))),
-            ")" => Ok(Some(self.contextualize(Token::RightParen))),
-            "{" => Ok(Some(self.contextualize(Token::LeftBrace))),
-            "}" => Ok(Some(self.contextualize(Token::RightBrace))),
-            "," => Ok(Some(self.contextualize(Token::Comma))),
-            "." => Ok(Some(self.contextualize(Token::Dot))),
-            "-" => Ok(Some(self.contextualize(Token::Minus))),
-            "+" => Ok(Some(self.contextualize(Token::Plus))),
-            ";" => Ok(Some(self.contextualize(Token::Semicolon))),
-            "*" => Ok(Some(self.contextualize(Token::Star))),
+            "(" => Ok(self.contextualize(Token::LeftParen)),
+            ")" => Ok(self.contextualize(Token::RightParen)),
+            "{" => Ok(self.contextualize(Token::LeftBrace)),
+            "}" => Ok(self.contextualize(Token::RightBrace)),
+            "," => Ok(self.contextualize(Token::Comma)),
+            "." => Ok(self.contextualize(Token::Dot)),
+            "-" => Ok(self.contextualize(Token::Minus)),
+            "+" => Ok(self.contextualize(Token::Plus)),
+            ";" => Ok(self.contextualize(Token::Semicolon)),
+            "*" => Ok(self.contextualize(Token::Star)),
             "/" => {
                 if self.next_matches("/") {
                     while self.peek() != "\0" && !self.is_at_end() {
@@ -80,15 +93,17 @@ impl<'a> ScanState<'a> {
                     }
                     // This isn't capturing the text of the comment, so we shouldn't treat the token as
                     // a string of comment text.
-                    Ok(None)
+                    self.comment()
                 } else {
-                    Ok(Some(self.contextualize(Token::Slash)))
+                    Ok(self.contextualize(Token::Slash))
                 }
             }
-            " " | "\r" | "\t" => Ok(None),
+            " " => Ok(self.contextualize(Token::Space)),
+            "\r" => Ok(self.contextualize(Token::CarriageReturn)),
+            "\t" => Ok(self.contextualize(Token::Tab)),
             "\n" => {
                 self.current_line += 1;
-                Ok(None)
+                Ok(self.contextualize(Token::NewLine))
             }
             "\"" => self.string(),
             _ => Err(self.error()),
@@ -110,7 +125,7 @@ impl<'a> ScanState<'a> {
 
     // Longer lexemes
 
-    fn string(&mut self) -> Result<Option<TokenContext>, FellowError> {
+    fn string(&mut self) -> Result<TokenContext, FellowError> {
         while self.peek() != "\"" && !self.is_at_end() {
             if self.peek() == "\n" {
                 self.current_line += 1;
@@ -124,8 +139,12 @@ impl<'a> ScanState<'a> {
                 position: self.current_grapheme,
             }))
         } else {
-            Ok(Some(self.contextualize(Token::String(self.lexeme()))))
+            Ok(self.contextualize(Token::String(self.lexeme())))
         }
+    }
+
+    fn comment(&mut self) -> Result<TokenContext, FellowError> {
+        unimplemented!()
     }
 
     fn error(&self) -> FellowError {
@@ -148,7 +167,7 @@ pub fn scan(source_code: &str) -> Result<Vec<TokenContext>, FellowError> {
     while !state.is_at_end() {
         state.mark_lexeme_start();
         let token = state.scan_token()?;
-        token.into_iter().for_each(|t| tokens.push(t));
+        tokens.push(token);
     }
 
     tokens.push(state.contextualize(Token::EndOfFile));

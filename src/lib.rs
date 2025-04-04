@@ -9,9 +9,9 @@ use crate::token::{Token, TokenContext};
 
 #[derive(Debug)]
 pub struct ScanError {
-    _message: String,
-    _line: usize,
-    _position: usize,
+    message: String,
+    line: usize,
+    position: usize,
 }
 
 #[derive(Debug)]
@@ -25,7 +25,15 @@ impl Error for FellowError {}
 
 impl fmt::Display for FellowError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Fellow error occurred")
+        match &self {
+            Self::CannotReadFile => write!(f, "Cannot read file"),
+            Self::InterpreterError => write!(f, "Fellow interpreter error"),
+            Self::ScanError(err) => write!(
+                f,
+                "Fellow scanner error occured at line {}:{}\n\t{}",
+                err.line, err.position, err.message
+            ),
+        }
     }
 }
 

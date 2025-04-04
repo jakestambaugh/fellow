@@ -28,51 +28,115 @@ impl<'a> ScanState<'a> {
         self.lexeme_start = self.current_grapheme;
     }
 
+    fn lexeme(&self) -> String {
+        self.source[self.lexeme_start..self.current_grapheme].concat()
+    }
+
     fn is_at_end(&self) -> bool {
         self.current_grapheme >= self.source.len()
     }
 
-    // Advances the scanner and emits the next token
-    fn scan_token(&mut self) -> Result<TokenContext, FellowError> {
+    fn next(&mut self) -> &str {
         let c = self.source[self.current_grapheme];
         self.current_grapheme += 1;
+        c
+    }
+
+    fn next_matches(&mut self, expected: &str) -> bool {
+        if self.is_at_end() || self.source[self.current_grapheme] != expected {
+            false
+        } else {
+            self.current_grapheme += 1;
+            true
+        }
+    }
+
+    fn peek(&self) -> &str {
+        if self.is_at_end() {
+            "\0"
+        } else {
+            self.source[self.current_grapheme]
+        }
+    }
+
+    // Advances the scanner and emits the next token
+    fn scan_token(&mut self) -> Result<Option<TokenContext>, FellowError> {
+        let c = self.next();
         match c {
-            "(" => self.contextualize(Token::LeftParen),
-            ")" => self.contextualize(Token::RightParen),
-            "{" => self.contextualize(Token::LeftBrace),
-            "}" => self.contextualize(Token::RightBrace),
-            "," => self.contextualize(Token::Comma),
-            "." => self.contextualize(Token::Dot),
-            "-" => self.contextualize(Token::Minus),
-            "+" => self.contextualize(Token::Plus),
-            ";" => self.contextualize(Token::Semicolon),
-            "*" => self.contextualize(Token::Star),
-            _ => self.error(),
+            "(" => Ok(Some(self.contextualize(Token::LeftParen))),
+            ")" => Ok(Some(self.contextualize(Token::RightParen))),
+            "{" => Ok(Some(self.contextualize(Token::LeftBrace))),
+            "}" => Ok(Some(self.contextualize(Token::RightBrace))),
+            "," => Ok(Some(self.contextualize(Token::Comma))),
+            "." => Ok(Some(self.contextualize(Token::Dot))),
+            "-" => Ok(Some(self.contextualize(Token::Minus))),
+            "+" => Ok(Some(self.contextualize(Token::Plus))),
+            ";" => Ok(Some(self.contextualize(Token::Semicolon))),
+            "*" => Ok(Some(self.contextualize(Token::Star))),
+            "/" => {
+                if self.next_matches("/") {
+                    while self.peek() != "\0" && !self.is_at_end() {
+                        self.next();
+                    }
+                    // This isn't capturing the text of the comment, so we shouldn't treat the token as
+                    // a string of comment text.
+                    Ok(None)
+                } else {
+                    Ok(Some(self.contextualize(Token::Slash)))
+                }
+            }
+            " " | "\r" | "\t" => Ok(None),
+            "\n" => {
+                self.current_line += 1;
+                Ok(None)
+            }
+            "\"" => self.string(),
+            _ => Err(self.error()),
         }
     }
 
     // This might be a dumb name for this method, but the idea is to wrap a
     // Token in the source code context that it was found in. For instance, the
     // line number, start position, and original lexeme
-    fn contextualize(&self, token: Token) -> Result<TokenContext, FellowError> {
-        Ok(TokenContext::new(
+    fn contextualize(&self, token: Token) -> TokenContext {
+        TokenContext::new(
             token,
-            self.source[self.lexeme_start..self.current_grapheme].concat(),
+            self.lexeme(),
             self.current_line,
             self.lexeme_start,
             self.current_grapheme,
-        ))
+        )
     }
 
-    fn error(&self) -> Result<TokenContext, FellowError> {
-        Err(FellowError::ScanError(ScanError {
-            _message: format!("Failed to scan at {}", self.current_grapheme),
-            _line: self.current_line,
+    // Longer lexemes
+
+    fn string(&mut self) -> Result<Option<TokenContext>, FellowError> {
+        while self.peek() != "\"" && !self.is_at_end() {
+            if self.peek() == "\n" {
+                self.current_line += 1;
+            }
+            self.next();
+        }
+        if self.is_at_end() {
+            Err(FellowError::ScanError(ScanError {
+                message: format!("Unterminated string {}", self.lexeme()),
+                line: self.current_line,
+                position: self.current_grapheme,
+            }))
+        } else {
+            Ok(Some(self.contextualize(Token::String(self.lexeme()))))
+        }
+    }
+
+    fn error(&self) -> FellowError {
+        FellowError::ScanError(ScanError {
+            message: format!("Failed to scan at {}", self.current_grapheme),
+            line: self.current_line,
             // TODO: This should be an offset from the start of the line. I'd also like to
             // calcualte the length of the error lexeme, but that might be impossible we haven't
             // finished lexing yet.
-            _position: self.current_grapheme,
-        }))
+            position: self.current_grapheme,
+        })
     }
 }
 
@@ -84,10 +148,10 @@ pub fn scan(source_code: &str) -> Result<Vec<TokenContext>, FellowError> {
     while !state.is_at_end() {
         state.mark_lexeme_start();
         let token = state.scan_token()?;
-        tokens.push(token)
+        token.into_iter().for_each(|t| tokens.push(t));
     }
 
-    tokens.push(state.contextualize(Token::EndOfFile)?);
+    tokens.push(state.contextualize(Token::EndOfFile));
     Ok(tokens)
 }
 

@@ -130,8 +130,10 @@ impl<'a> ScanState<'a> {
             if self.peek() == "\n" {
                 self.current_line += 1;
             }
+            let _so_far = self.lexeme();
             self.next();
         }
+        let _so_far_again = self.lexeme();
         if self.is_at_end() {
             Err(FellowError::ScanError(ScanError {
                 message: format!("Unterminated string {}", self.lexeme()),
@@ -139,12 +141,24 @@ impl<'a> ScanState<'a> {
                 position: self.current_grapheme,
             }))
         } else {
-            Ok(self.contextualize(Token::String(self.lexeme())))
+            // Consume the final "
+            self.next();
+            // The +1 and -1 trim the actual "" characters since we only want the contents of the
+            // string.
+            Ok(self.contextualize(Token::String(
+                self.source[self.lexeme_start + 1..self.current_grapheme - 1].concat(),
+            )))
         }
     }
 
     fn comment(&mut self) -> Result<TokenContext, FellowError> {
-        unimplemented!()
+        while self.peek() != "\n" && !self.is_at_end() {
+            self.next();
+        }
+        // The +2 is to skip the // characters since we only want the text of the comment.
+        Ok(self.contextualize(Token::Comment(
+            self.source[self.lexeme_start + 2..self.current_grapheme].concat(),
+        )))
     }
 
     fn error(&self) -> FellowError {
@@ -199,6 +213,26 @@ mod tests {
                 Token::Plus,
                 Token::Semicolon,
                 Token::Star,
+                Token::EndOfFile
+            ]
+        )
+    }
+
+    #[test]
+    fn scans_strings() {
+        let source = r#" "Hello" "#;
+
+        let tokens: Vec<Token> = scan(source)
+            .unwrap()
+            .into_iter()
+            .map(|tc| tc.token)
+            .collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Space,
+                Token::String("Hello".to_string()),
+                Token::Space,
                 Token::EndOfFile
             ]
         )

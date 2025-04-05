@@ -26,8 +26,12 @@ pub enum Token {
     // Literals.
     Identifier(String),
     String(String),
-    Number(String),
+    Integer(i64),
+    Float(f64),
     Boolean(String),
+
+    // Comment
+    Comment(String),
 
     // Keywords.
     And,
@@ -47,11 +51,23 @@ pub enum Token {
     Var,
     While,
 
+    // Whitespace
     EndOfFile,
     Space,
     Tab,
     NewLine,
     CarriageReturn,
+}
+
+impl Token {
+    pub fn is_whitespace(&self) -> bool {
+        match self {
+            Self::EndOfFile | Self::Space | Self::Tab | Self::NewLine | Self::CarriageReturn => {
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 // The value and position of the token from the source code

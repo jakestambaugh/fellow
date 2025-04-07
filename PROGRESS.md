@@ -1,4 +1,9 @@
---2025-03-32 4:37
+--2025-04-06 22:59
+
+The scanner now has some tests around the things tokens that it can recognize.
+I'm trying to capture the rest of the tokens now.
+
+--2025-03-31 4:37
 
 Moved the scan functions into a separate file
 

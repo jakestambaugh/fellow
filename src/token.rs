@@ -11,6 +11,7 @@ pub enum Token {
     Plus,
     Semicolon,
     Slash,
+    ForwardSlash,
     Star,
 
     // One or two character tokens.
@@ -19,7 +20,7 @@ pub enum Token {
     Equal,
     EqualEqual,
     Greater,
-    GreaterEquAL,
+    GreaterEqual,
     Less,
     LessEqual,
 
@@ -61,12 +62,10 @@ pub enum Token {
 
 impl Token {
     pub fn is_whitespace(&self) -> bool {
-        match self {
-            Self::EndOfFile | Self::Space | Self::Tab | Self::NewLine | Self::CarriageReturn => {
-                true
-            }
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::EndOfFile | Self::Space | Self::Tab | Self::NewLine | Self::CarriageReturn
+        )
     }
 }
 
@@ -76,7 +75,7 @@ pub struct TokenContext {
     lexeme: String,
     // The line the token was found on
     line: usize,
-    // The start and end grapheme in the line that the token was at
+    // The start and end grapheme in the source code that the token was at
     start: usize,
     end: usize,
 }

@@ -83,6 +83,35 @@ impl<'a> ScanState<'a> {
             "+" => Ok(self.contextualize(Token::Plus)),
             ";" => Ok(self.contextualize(Token::Semicolon)),
             "*" => Ok(self.contextualize(Token::Star)),
+            "\\" => Ok(self.contextualize(Token::ForwardSlash)),
+            "!" => {
+                if self.next_matches("=") {
+                    Ok(self.contextualize(Token::BangEqual))
+                } else {
+                    Ok(self.contextualize(Token::Bang))
+                }
+            }
+            "=" => {
+                if self.next_matches("=") {
+                    Ok(self.contextualize(Token::EqualEqual))
+                } else {
+                    Ok(self.contextualize(Token::Equal))
+                }
+            }
+            "<" => {
+                if self.next_matches("=") {
+                    Ok(self.contextualize(Token::LessEqual))
+                } else {
+                    Ok(self.contextualize(Token::Less))
+                }
+            }
+            ">" => {
+                if self.next_matches("=") {
+                    Ok(self.contextualize(Token::GreaterEqual))
+                } else {
+                    Ok(self.contextualize(Token::Greater))
+                }
+            }
             "/" => {
                 if self.next_matches("/") {
                     self.comment()
@@ -191,14 +220,22 @@ pub fn scan(source_code: &str) -> Result<Vec<TokenContext>, FellowError> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn scans_all_single_character_tokens() {
-        let source = "(){},.-+;*";
-        let tokens: Vec<Token> = scan(source)
+    // Runs the scan function and unpacks the Tokens from the TokenContext.
+    // This helper calls unwrap() so it should only be used when the test
+    // is expected to scan properlyThis helper calls unwrap() so it should only be used when the
+    // test is expected to scan properly.
+    fn scan_to_tokens(source: &str) -> Vec<Token> {
+        scan(source)
             .unwrap()
             .into_iter()
             .map(|tc| tc.token)
-            .collect();
+            .collect()
+    }
+
+    #[test]
+    fn scans_all_single_character_tokens() {
+        let source = "(){},.-+;*";
+        let tokens = scan_to_tokens(source);
         assert_eq!(
             tokens,
             vec![
@@ -221,12 +258,7 @@ mod tests {
     fn scans_multiline_strings() {
         let source = r#" "Hello
 There" "#;
-
-        let tokens: Vec<Token> = scan(source)
-            .unwrap()
-            .into_iter()
-            .map(|tc| tc.token)
-            .collect();
+        let tokens = scan_to_tokens(source);
         assert_eq!(
             tokens,
             vec![
@@ -241,12 +273,7 @@ There" "#;
     #[test]
     fn scans_strings() {
         let source = r#" "Hello" "#;
-
-        let tokens: Vec<Token> = scan(source)
-            .unwrap()
-            .into_iter()
-            .map(|tc| tc.token)
-            .collect();
+        let tokens = scan_to_tokens(source);
         assert_eq!(
             tokens,
             vec![
@@ -264,12 +291,7 @@ There" "#;
 // So is this
 "Not this"
 "#;
-
-        let tokens: Vec<Token> = scan(source)
-            .unwrap()
-            .into_iter()
-            .map(|tc| tc.token)
-            .collect();
+        let tokens = scan_to_tokens(source);
         assert_eq!(
             tokens,
             vec![
@@ -277,6 +299,32 @@ There" "#;
                 Token::Comment(" So is this".to_string()),
                 Token::String("Not this".to_string()),
                 Token::NewLine,
+                Token::EndOfFile
+            ]
+        )
+    }
+
+    #[test]
+    fn scans_two_char_tokens() {
+        // I threw some spaces in here because my font makes ligatures that can make the tokens a
+        // bit confusing when stacked together.
+        let source = "=!<> != <= >= ==";
+        let tokens = scan_to_tokens(source);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Equal,
+                Token::Bang,
+                Token::Less,
+                Token::Greater,
+                Token::Space,
+                Token::BangEqual,
+                Token::Space,
+                Token::LessEqual,
+                Token::Space,
+                Token::GreaterEqual,
+                Token::Space,
+                Token::EqualEqual,
                 Token::EndOfFile
             ]
         )

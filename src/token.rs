@@ -23,6 +23,8 @@ pub enum Token {
     GreaterEqual,
     Less,
     LessEqual,
+    Colon,
+    ColonColon,
 
     // Literals.
     Identifier(String),

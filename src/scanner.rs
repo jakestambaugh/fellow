@@ -119,6 +119,13 @@ impl<'a> ScanState<'a> {
                     Ok(self.contextualize(Token::Slash))
                 }
             }
+            ":" => {
+                if self.next_matches(":") {
+                    Ok(self.contextualize(Token::ColonColon))
+                } else {
+                    Ok(self.contextualize(Token::Colon))
+                }
+            }
             " " => Ok(self.contextualize(Token::Space)),
             "\r" => Ok(self.contextualize(Token::CarriageReturn)),
             "\t" => Ok(self.contextualize(Token::Tab)),
@@ -308,7 +315,7 @@ There" "#;
     fn scans_two_char_tokens() {
         // I threw some spaces in here because my font makes ligatures that can make the tokens a
         // bit confusing when stacked together.
-        let source = "=!<> != <= >= ==";
+        let source = "=!<>: != <= >= == ::";
         let tokens = scan_to_tokens(source);
         assert_eq!(
             tokens,
@@ -317,6 +324,7 @@ There" "#;
                 Token::Bang,
                 Token::Less,
                 Token::Greater,
+                Token::Colon,
                 Token::Space,
                 Token::BangEqual,
                 Token::Space,
@@ -325,6 +333,8 @@ There" "#;
                 Token::GreaterEqual,
                 Token::Space,
                 Token::EqualEqual,
+                Token::Space,
+                Token::ColonColon,
                 Token::EndOfFile
             ]
         )

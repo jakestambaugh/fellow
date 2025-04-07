@@ -1,7 +1,4 @@
-use crate::{
-    FellowError, ScanError,
-    token::{Token, TokenContext},
-};
+use crate::{FellowError, ScanError, Token, TokenContext};
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -88,11 +85,6 @@ impl<'a> ScanState<'a> {
             "*" => Ok(self.contextualize(Token::Star)),
             "/" => {
                 if self.next_matches("/") {
-                    while self.peek() != "\0" && !self.is_at_end() {
-                        self.next();
-                    }
-                    // This isn't capturing the text of the comment, so we shouldn't treat the token as
-                    // a string of comment text.
                     self.comment()
                 } else {
                     Ok(self.contextualize(Token::Slash))
@@ -130,10 +122,8 @@ impl<'a> ScanState<'a> {
             if self.peek() == "\n" {
                 self.current_line += 1;
             }
-            let _so_far = self.lexeme();
             self.next();
         }
-        let _so_far_again = self.lexeme();
         if self.is_at_end() {
             Err(FellowError::ScanError(ScanError {
                 message: format!("Unterminated string {}", self.lexeme()),
@@ -153,11 +143,20 @@ impl<'a> ScanState<'a> {
 
     fn comment(&mut self) -> Result<TokenContext, FellowError> {
         while self.peek() != "\n" && !self.is_at_end() {
+            let a = self.peek();
+            if a == "\n" {
+                eprintln!("something has gone wrong, there is a newline in the comment");
+            }
+            self.next();
+        }
+        if self.peek() == "\n" {
+            self.current_line += 1;
             self.next();
         }
         // The +2 is to skip the // characters since we only want the text of the comment.
+        // The -1 is to cut off the newline that follows the comment
         Ok(self.contextualize(Token::Comment(
-            self.source[self.lexeme_start + 2..self.current_grapheme].concat(),
+            self.source[self.lexeme_start + 2..self.current_grapheme - 1].concat(),
         )))
     }
 
@@ -219,6 +218,27 @@ mod tests {
     }
 
     #[test]
+    fn scans_multiline_strings() {
+        let source = r#" "Hello
+There" "#;
+
+        let tokens: Vec<Token> = scan(source)
+            .unwrap()
+            .into_iter()
+            .map(|tc| tc.token)
+            .collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Space,
+                Token::String("Hello\nThere".to_string()),
+                Token::Space,
+                Token::EndOfFile
+            ]
+        )
+    }
+
+    #[test]
     fn scans_strings() {
         let source = r#" "Hello" "#;
 
@@ -233,6 +253,30 @@ mod tests {
                 Token::Space,
                 Token::String("Hello".to_string()),
                 Token::Space,
+                Token::EndOfFile
+            ]
+        )
+    }
+
+    #[test]
+    fn scans_comments() {
+        let source = r#"// This is a comment
+// So is this
+"Not this"
+"#;
+
+        let tokens: Vec<Token> = scan(source)
+            .unwrap()
+            .into_iter()
+            .map(|tc| tc.token)
+            .collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(" This is a comment".to_string()),
+                Token::Comment(" So is this".to_string()),
+                Token::String("Not this".to_string()),
+                Token::NewLine,
                 Token::EndOfFile
             ]
         )

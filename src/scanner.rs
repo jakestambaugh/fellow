@@ -134,6 +134,7 @@ impl<'a> ScanState<'a> {
                 Ok(self.contextualize(Token::NewLine))
             }
             "\"" => self.string(),
+            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => self.integer(),
             _ => Err(self.error()),
         }
     }
@@ -177,12 +178,22 @@ impl<'a> ScanState<'a> {
         }
     }
 
+    fn integer(&mut self) -> Result<TokenContext, FellowError> {
+        while self.peek().parse::<i64>().is_ok() {
+            self.next();
+        }
+        match self.lexeme().parse() {
+            Ok(value) => Ok(self.contextualize(Token::Integer(value))),
+            Err(e) => Err(FellowError::ScanError(ScanError {
+                message: e.to_string(),
+                line: self.current_line,
+                position: self.current_grapheme,
+            })),
+        }
+    }
+
     fn comment(&mut self) -> Result<TokenContext, FellowError> {
         while self.peek() != "\n" && !self.is_at_end() {
-            let a = self.peek();
-            if a == "\n" {
-                eprintln!("something has gone wrong, there is a newline in the comment");
-            }
             self.next();
         }
         if self.peek() == "\n" {

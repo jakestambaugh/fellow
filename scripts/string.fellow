@@ -1,1 +1,2 @@
+// expected: hello, world
 "hello, world"

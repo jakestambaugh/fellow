@@ -63,7 +63,7 @@ pub fn interpret(source_code: &str) -> Result<FellowValue, FellowError> {
     match tokens
         .into_iter()
         .filter(|t| !t.token.is_whitespace())
-        .last()
+        .next_back()
     {
         Some(v) => Ok(parse_token(v)),
         None => Err(FellowError::InterpreterError),

@@ -1,3 +1,7 @@
+--2025-07-21 21:11
+
+Get the tokenizer working in the CLI.
+
 --2025-04-06 22:59
 
 The scanner now has some tests around the things tokens that it can recognize.

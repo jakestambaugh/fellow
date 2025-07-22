@@ -1,3 +1,5 @@
+use std::str::pattern::Pattern;
+
 use crate::{FellowError, ScanError, Token, TokenContext};
 
 use unicode_segmentation::UnicodeSegmentation;
@@ -12,6 +14,10 @@ pub struct ScanState<'a> {
 }
 
 impl<'a> ScanState<'a> {
+    // I think that this project could become an experiment in Unicode source code interpretation.
+    // There are many guidances from the Unicode Consortium about the proper way to do this, and I
+    // think it would be fun to try to understand as much of it as possible.
+    // https://www.unicode.org/reports/tr55/#Specifications
     fn new(source_code: &'a str) -> Self {
         Self {
             source: source_code.graphemes(true).collect(),
@@ -60,7 +66,7 @@ impl<'a> ScanState<'a> {
     //
     // I originally tried to follow the pattern in Crafting Interpreters where the lexer skips
     // certain characters like newlines and comments without tokenizing them. However, this meant
-    // that the scan_token function was becoming very "mulit-modal" in its return structure.
+    // that the scan_token function was becoming very "multi-modal" in its return structure.
     // It could return:
     // * A successfully parsed Token
     // * An error, most likely due to malformed input
@@ -135,6 +141,12 @@ impl<'a> ScanState<'a> {
             }
             "\"" => self.string(),
             "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => self.integer(),
+            // https://www.unicode.org/reports/tr31/
+            // I think it would be cool to use the unicode-ident table to define what counts as an
+            // identifier. The unicode-ident crate doesn't take graphemes, it takes chars. Not sure
+            // if I should just index into c[0] and pass it in, or try to understand which
+            // graphemes bytes count as non XID_start chars.
+            "TODO" => self.keyword_or_identifier(),
             _ => Err(self.error()),
         }
     }
@@ -212,10 +224,19 @@ impl<'a> ScanState<'a> {
             message: format!("Failed to scan at {}", self.current_grapheme),
             line: self.current_line,
             // TODO: This should be an offset from the start of the line. I'd also like to
-            // calcualte the length of the error lexeme, but that might be impossible we haven't
+            // calculate the length of the error lexeme, but that might be impossible since we haven't
             // finished lexing yet.
             position: self.current_grapheme,
         })
+    }
+
+    fn keyword_or_identifier(&self) -> Result<TokenContext, FellowError> {
+        while self.peek() && !self.is_at_end() {
+            self.next();
+        }
+        Ok(self.contextualize(Token::Identifier(
+            self.source[self.lexeme_start + 1..self.current_grapheme - 1].concat(),
+        )))
     }
 }
 

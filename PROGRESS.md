@@ -1,3 +1,14 @@
+--2025-07-31 22:06
+
+I want to make the lexing/tokenizing part better. I have to outline the goals that are in conflict:
+
+* support unicode (I want unicode identifiers like Swift)
+* be easy to parse by hand (I want to write the lexer by hand)
+* support the idea of "a language for technical interviews"
+
+My first attempt was to simply store the source as a &str and index into it.
+I immediately learned that I can't do that, because the index operation would   
+
 --2025-07-21 21:11
 
 Get the tokenizer working in the CLI.

@@ -1,15 +1,13 @@
-use std::str::pattern::Pattern;
+use std::string::FromUtf8Error;
 
 use crate::{FellowError, ScanError, Token, TokenContext};
-
-use unicode_segmentation::UnicodeSegmentation;
 
 /// The state of the scan is held in a struct. Helper functions can operate
 /// on the state to figure out which tokens to emit
 pub struct ScanState<'a> {
-    source: Vec<&'a str>,
+    source: &'a [u8],
     lexeme_start: usize,
-    current_grapheme: usize,
+    current_byte: usize,
     current_line: usize,
 }
 
@@ -20,45 +18,45 @@ impl<'a> ScanState<'a> {
     // https://www.unicode.org/reports/tr55/#Specifications
     fn new(source_code: &'a str) -> Self {
         Self {
-            source: source_code.graphemes(true).collect(),
+            source: source_code.as_bytes(),
             lexeme_start: 0,
-            current_grapheme: 0,
+            current_byte: 0,
             current_line: 0,
         }
     }
 
     fn mark_lexeme_start(&mut self) {
-        self.lexeme_start = self.current_grapheme;
+        self.lexeme_start = self.current_byte;
     }
 
-    fn lexeme(&self) -> String {
-        self.source[self.lexeme_start..self.current_grapheme].concat()
+    fn lexeme(&self) -> Result<String, FromUtf8Error> {
+        String::from_utf8(self.source[self.lexeme_start..self.current_byte].to_vec())
     }
 
     fn is_at_end(&self) -> bool {
-        self.current_grapheme >= self.source.len()
+        self.current_byte >= self.source.len()
     }
 
-    fn next(&mut self) -> &str {
-        let c = self.source[self.current_grapheme];
-        self.current_grapheme += 1;
-        c
+    fn next(&mut self) -> char {
+        let c = self.source[self.current_byte];
+        self.current_byte += 1;
+        c as char
     }
 
-    fn next_matches(&mut self, expected: &str) -> bool {
-        if self.is_at_end() || self.source[self.current_grapheme] != expected {
+    fn next_matches(&mut self, expected: char) -> bool {
+        if self.is_at_end() || self.source[self.current_byte] != expected as u8 {
             false
         } else {
-            self.current_grapheme += 1;
+            self.current_byte += 1;
             true
         }
     }
 
-    fn peek(&self) -> &str {
+    fn peek(&self) -> char {
         if self.is_at_end() {
-            "\0"
+            '\0'
         } else {
-            self.source[self.current_grapheme]
+            self.source[self.current_byte] as char
         }
     }
 
@@ -79,74 +77,74 @@ impl<'a> ScanState<'a> {
     fn scan_token(&mut self) -> Result<TokenContext, FellowError> {
         let c = self.next();
         match c {
-            "(" => Ok(self.contextualize(Token::LeftParen)),
-            ")" => Ok(self.contextualize(Token::RightParen)),
-            "{" => Ok(self.contextualize(Token::LeftBrace)),
-            "}" => Ok(self.contextualize(Token::RightBrace)),
-            "," => Ok(self.contextualize(Token::Comma)),
-            "." => Ok(self.contextualize(Token::Dot)),
-            "-" => Ok(self.contextualize(Token::Minus)),
-            "+" => Ok(self.contextualize(Token::Plus)),
-            ";" => Ok(self.contextualize(Token::Semicolon)),
-            "*" => Ok(self.contextualize(Token::Star)),
-            "\\" => Ok(self.contextualize(Token::ForwardSlash)),
-            "!" => {
-                if self.next_matches("=") {
-                    Ok(self.contextualize(Token::BangEqual))
+            '(' => self.contextualize(Token::LeftParen),
+            ')' => self.contextualize(Token::RightParen),
+            '{' => self.contextualize(Token::LeftBrace),
+            '}' => self.contextualize(Token::RightBrace),
+            ',' => self.contextualize(Token::Comma),
+            '.' => self.contextualize(Token::Dot),
+            '-' => self.contextualize(Token::Minus),
+            '+' => self.contextualize(Token::Plus),
+            ';' => self.contextualize(Token::Semicolon),
+            '*' => self.contextualize(Token::Star),
+            '\\' => self.contextualize(Token::ForwardSlash),
+            '!' => {
+                if self.next_matches('=') {
+                    self.contextualize(Token::BangEqual)
                 } else {
-                    Ok(self.contextualize(Token::Bang))
+                    self.contextualize(Token::Bang)
                 }
             }
-            "=" => {
-                if self.next_matches("=") {
-                    Ok(self.contextualize(Token::EqualEqual))
+            '=' => {
+                if self.next_matches('=') {
+                    self.contextualize(Token::EqualEqual)
                 } else {
-                    Ok(self.contextualize(Token::Equal))
+                    self.contextualize(Token::Equal)
                 }
             }
-            "<" => {
-                if self.next_matches("=") {
-                    Ok(self.contextualize(Token::LessEqual))
+            '<' => {
+                if self.next_matches('=') {
+                    self.contextualize(Token::LessEqual)
                 } else {
-                    Ok(self.contextualize(Token::Less))
+                    self.contextualize(Token::Less)
                 }
             }
-            ">" => {
-                if self.next_matches("=") {
-                    Ok(self.contextualize(Token::GreaterEqual))
+            '>' => {
+                if self.next_matches('=') {
+                    self.contextualize(Token::GreaterEqual)
                 } else {
-                    Ok(self.contextualize(Token::Greater))
+                    self.contextualize(Token::Greater)
                 }
             }
-            "/" => {
-                if self.next_matches("/") {
+            '/' => {
+                if self.next_matches('/') {
                     self.comment()
                 } else {
-                    Ok(self.contextualize(Token::Slash))
+                    self.contextualize(Token::Slash)
                 }
             }
-            ":" => {
-                if self.next_matches(":") {
-                    Ok(self.contextualize(Token::ColonColon))
+            ':' => {
+                if self.next_matches(':') {
+                    self.contextualize(Token::ColonColon)
                 } else {
-                    Ok(self.contextualize(Token::Colon))
+                    self.contextualize(Token::Colon)
                 }
             }
-            " " => Ok(self.contextualize(Token::Space)),
-            "\r" => Ok(self.contextualize(Token::CarriageReturn)),
-            "\t" => Ok(self.contextualize(Token::Tab)),
-            "\n" => {
+            ' ' => self.contextualize(Token::Space),
+            '\r' => self.contextualize(Token::CarriageReturn),
+            '\t' => self.contextualize(Token::Tab),
+            '\n' => {
                 self.current_line += 1;
-                Ok(self.contextualize(Token::NewLine))
+                self.contextualize(Token::NewLine)
             }
-            "\"" => self.string(),
-            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => self.integer(),
+            '\"' => self.string(),
+            '0'..='9' => self.integer_or_float(),
             // https://www.unicode.org/reports/tr31/
             // I think it would be cool to use the unicode-ident table to define what counts as an
-            // identifier. The unicode-ident crate doesn't take graphemes, it takes chars. Not sure
+            // identifier. The unicode-ident crate doesn't take bytes, it takes chars. Not sure
             // if I should just index into c[0] and pass it in, or try to understand which
-            // graphemes bytes count as non XID_start chars.
-            "TODO" => self.keyword_or_identifier(),
+            // bytes bytes count as non XID_start chars.
+            'A'..='Z' | 'a'..='z' | '_' => self.keyword_or_identifier(),
             _ => Err(self.error()),
         }
     }
@@ -154,89 +152,127 @@ impl<'a> ScanState<'a> {
     // This might be a dumb name for this method, but the idea is to wrap a
     // Token in the source code context that it was found in. For instance, the
     // line number, start position, and original lexeme
-    fn contextualize(&self, token: Token) -> TokenContext {
-        TokenContext::new(
+    fn contextualize(&self, token: Token) -> Result<TokenContext, FellowError> {
+        Ok(TokenContext::new(
             token,
-            self.lexeme(),
+            self.lexeme()?,
             self.current_line,
             self.lexeme_start,
-            self.current_grapheme,
-        )
+            self.current_byte,
+        ))
     }
 
     // Longer lexemes
 
     fn string(&mut self) -> Result<TokenContext, FellowError> {
-        while self.peek() != "\"" && !self.is_at_end() {
-            if self.peek() == "\n" {
+        while self.peek() != '\"' && !self.is_at_end() {
+            if self.peek() == '\n' {
                 self.current_line += 1;
             }
             self.next();
         }
         if self.is_at_end() {
             Err(FellowError::ScanError(ScanError {
-                message: format!("Unterminated string {}", self.lexeme()),
+                message: format!("Unterminated string {}", self.lexeme().unwrap()), // TODO: deal
+                // with this
+                // unwrap too
                 line: self.current_line,
-                position: self.current_grapheme,
+                position: self.current_byte,
             }))
         } else {
             // Consume the final "
             self.next();
             // The +1 and -1 trim the actual "" characters since we only want the contents of the
             // string.
-            Ok(self.contextualize(Token::String(
-                self.source[self.lexeme_start + 1..self.current_grapheme - 1].concat(),
-            )))
+            let lexeme: String = String::from_utf8(
+                self.source[self.lexeme_start + 1..self.current_byte - 1].to_vec(),
+            )?;
+            self.contextualize(Token::String(lexeme))
         }
     }
 
-    fn integer(&mut self) -> Result<TokenContext, FellowError> {
-        while self.peek().parse::<i64>().is_ok() {
+    fn integer_or_float(&mut self) -> Result<TokenContext, FellowError> {
+        while self.peek().is_ascii_digit() && !self.is_at_end() {
             self.next();
         }
-        match self.lexeme().parse() {
-            Ok(value) => Ok(self.contextualize(Token::Integer(value))),
-            Err(e) => Err(FellowError::ScanError(ScanError {
-                message: e.to_string(),
-                line: self.current_line,
-                position: self.current_grapheme,
-            })),
+        // TODO: I need to check for the case where the dot ends the number. I could make that implicitly .0, but that isn't obvious.
+        // Doing this properly would require an extra lookahead to see if the next character is a digit.
+        // Consuming a character with next() would comsume the . without generating a PERIOD token.
+        if self.peek() == '.' {
+            while self.peek().is_ascii_digit() && !self.is_at_end() {
+                self.next();
+            }
+            match self.lexeme()?.parse() {
+                Ok(value) => self.contextualize(Token::Float(value)),
+                Err(e) => Err(FellowError::ScanError(ScanError {
+                    message: e.to_string(),
+                    line: self.current_line,
+                    position: self.current_byte,
+                })),
+            }
+        } else {
+            match self.lexeme()?.parse() {
+                Ok(value) => self.contextualize(Token::Integer(value)),
+                Err(e) => Err(FellowError::ScanError(ScanError {
+                    message: e.to_string(),
+                    line: self.current_line,
+                    position: self.current_byte,
+                })),
+            }
         }
     }
 
     fn comment(&mut self) -> Result<TokenContext, FellowError> {
-        while self.peek() != "\n" && !self.is_at_end() {
+        while self.peek() != '\n' && !self.is_at_end() {
             self.next();
         }
-        if self.peek() == "\n" {
+        if self.peek() == '\n' {
             self.current_line += 1;
             self.next();
         }
         // The +2 is to skip the // characters since we only want the text of the comment.
         // The -1 is to cut off the newline that follows the comment
-        Ok(self.contextualize(Token::Comment(
-            self.source[self.lexeme_start + 2..self.current_grapheme - 1].concat(),
-        )))
+        self.contextualize(Token::Comment(String::from_utf8(
+            self.source[self.lexeme_start + 2..self.current_byte - 1].to_vec(),
+        )?))
+    }
+
+    fn keyword_or_identifier(&mut self) -> Result<TokenContext, FellowError> {
+        while (self.peek().is_alphanumeric() || self.peek() == '_') && !self.is_at_end() {
+            self.next();
+        }
+        let lexeme = self.lexeme()?;
+        let token = match lexeme.as_str() {
+            "and" => Token::And,
+            "class" => Token::Class,
+            "else" => Token::Else,
+            "false" => Token::False,
+            "fun" => Token::Fun,
+            "for" => Token::For,
+            "if" => Token::If,
+            "nil" => Token::Nil,
+            "or" => Token::Or,
+            "print" => Token::Print,
+            "return" => Token::Return,
+            "super" => Token::Super,
+            "this" => Token::This,
+            "true" => Token::True,
+            "var" => Token::Var,
+            "while" => Token::While,
+            _ => Token::Identifier(lexeme),
+        };
+        self.contextualize(token)
     }
 
     fn error(&self) -> FellowError {
         FellowError::ScanError(ScanError {
-            message: format!("Failed to scan at {}", self.current_grapheme),
+            message: format!("Failed to scan at {}", self.current_byte),
             line: self.current_line,
             // TODO: This should be an offset from the start of the line. I'd also like to
             // calculate the length of the error lexeme, but that might be impossible since we haven't
             // finished lexing yet.
-            position: self.current_grapheme,
+            position: self.current_byte,
         })
-    }
-
-    fn keyword_or_identifier(&self) -> Result<TokenContext, FellowError> {
-        while self.peek() && !self.is_at_end() {
-            self.next();
-        }
-        Ok(self.contextualize(Token::Identifier(
-            self.source[self.lexeme_start + 1..self.current_grapheme - 1].concat(),
-        )))
     }
 }
 
@@ -251,7 +287,9 @@ pub fn scan(source_code: &str) -> Result<Vec<TokenContext>, FellowError> {
         tokens.push(token);
     }
 
-    tokens.push(state.contextualize(Token::EndOfFile));
+    // safe to unwrap because we are at the end of the source code
+    // and the EndOfFile token is always valid.
+    tokens.push(state.contextualize(Token::EndOfFile).unwrap());
     Ok(tokens)
 }
 
@@ -261,8 +299,7 @@ mod tests {
 
     // Runs the scan function and unpacks the Tokens from the TokenContext.
     // This helper calls unwrap() so it should only be used when the test
-    // is expected to scan properlyThis helper calls unwrap() so it should only be used when the
-    // test is expected to scan properly.
+    // is expected to scan properly.
     fn scan_to_tokens(source: &str) -> Vec<Token> {
         scan(source)
             .unwrap()
@@ -345,8 +382,8 @@ There" "#;
 
     #[test]
     fn scans_two_char_tokens() {
-        // I threw some spaces in here because my font makes ligatures that can make the tokens a
-        // bit confusing when stacked together.
+        // I threw some spaces in here because my font has ligatures. It can make the tokens a
+        // bit visually confusing when stacked together.
         let source = "=!<>: != <= >= == ::";
         let tokens = scan_to_tokens(source);
         assert_eq!(
@@ -367,6 +404,55 @@ There" "#;
                 Token::EqualEqual,
                 Token::Space,
                 Token::ColonColon,
+                Token::EndOfFile
+            ]
+        )
+    }
+
+    #[test]
+    fn scans_keywords() {
+        let source =
+            "and class else false fun for if nil or print return super this true var while";
+        let tokens: Vec<Token> = scan_to_tokens(source)
+            .into_iter()
+            .filter(|t| t != &Token::Space)
+            .collect();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::And,
+                Token::Class,
+                Token::Else,
+                Token::False,
+                Token::Fun,
+                Token::For,
+                Token::If,
+                Token::Nil,
+                Token::Or,
+                Token::Print,
+                Token::Return,
+                Token::Super,
+                Token::This,
+                Token::True,
+                Token::Var,
+                Token::While,
+                Token::EndOfFile
+            ]
+        )
+    }
+
+    #[test]
+    fn scans_identifiers() {
+        let source = "myIdentifier anotherIdentifier _underscore123";
+        let tokens = scan_to_tokens(source);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Identifier("myIdentifier".to_string()),
+                Token::Space,
+                Token::Identifier("anotherIdentifier".to_string()),
+                Token::Space,
+                Token::Identifier("_underscore123".to_string()),
                 Token::EndOfFile
             ]
         )

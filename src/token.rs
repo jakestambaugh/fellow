@@ -29,9 +29,7 @@ pub enum Token {
     // Literals.
     Identifier(String),
     String(String),
-    Integer(i64),
-    Float(f64),
-    Boolean(String),
+    Number(i64),
 
     // Comment
     Comment(String),

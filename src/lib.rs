@@ -1,11 +1,14 @@
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::string::FromUtf8Error;
 
 mod scanner;
+mod parser;
 mod token;
 
 use crate::scanner::scan;
 use crate::token::{Token, TokenContext};
+use crate::parser::{Expr, parse};
 
 #[derive(Debug)]
 pub struct ScanError {
@@ -22,6 +25,17 @@ pub enum FellowError {
 }
 
 impl Error for FellowError {}
+
+impl From<FromUtf8Error> for FellowError {
+    fn from(_err: std::string::FromUtf8Error) -> Self {
+        // TODO: fix this up, get some context
+        Self::ScanError(ScanError {
+            message: "".to_string(),
+            line: 0,
+            position: 0,
+        })
+    }
+}
 
 impl fmt::Display for FellowError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -57,25 +71,23 @@ impl Display for FellowValue {
     }
 }
 
-// Pipeline for our interpreter
-pub fn interpret(source_code: &str) -> Result<FellowValue, FellowError> {
-    let tokens = scan(source_code)?;
-    match tokens
-        .into_iter()
-        .filter(|t| !t.token.is_whitespace())
-        .next_back()
-    {
-        Some(v) => Ok(parse_token(v)),
-        None => Err(FellowError::InterpreterError),
+fn evaluate(ast: Box<dyn Expr>) -> FellowValue {
+    // For now, we just return the last token's value
+    // In a real interpreter, this would involve more complex evaluation logic
+    if let Some(last_token) = ast.last() {
+        FellowValue::String("Something".to_string())
+    } else {
+        FellowValue::Nil
     }
 }
 
-fn parse_token(token_context: TokenContext) -> FellowValue {
-    match token_context.token {
-        Token::True => FellowValue::Boolean(true),
-        Token::False => FellowValue::Boolean(false),
-        Token::String(s) => FellowValue::String(s),
-        Token::Integer(i) => FellowValue::Int(i),
-        _ => FellowValue::Nil,
-    }
+// Pipeline for our interpreter
+pub fn interpret(source_code: &str) -> Result<FellowValue, FellowError> {
+    let tokens = scan(source_code)?;
+    let ast = match parse(tokens) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(FellowError::InterpreterError),
+    };
+    Ok(evaluate(ast?))
 }
+

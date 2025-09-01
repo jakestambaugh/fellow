@@ -2,13 +2,13 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::string::FromUtf8Error;
 
-mod scanner;
 mod parser;
+mod scanner;
 mod token;
 
+use crate::parser::{Expr, parse};
 use crate::scanner::scan;
 use crate::token::{Token, TokenContext};
-use crate::parser::{Expr, parse};
 
 #[derive(Debug)]
 pub struct ScanError {
@@ -71,13 +71,9 @@ impl Display for FellowValue {
     }
 }
 
-fn evaluate(ast: Box<dyn Expr>) -> FellowValue {
-    // For now, we just return the last token's value
-    // In a real interpreter, this would involve more complex evaluation logic
-    if let Some(last_token) = ast.last() {
-        FellowValue::String("Something".to_string())
-    } else {
-        FellowValue::Nil
+fn evaluate(ast: Expr) -> FellowValue {
+    match ast {
+        Expr::ValueExpr(fv) => fv,
     }
 }
 
@@ -90,4 +86,3 @@ pub fn interpret(source_code: &str) -> Result<FellowValue, FellowError> {
     };
     Ok(evaluate(ast?))
 }
-

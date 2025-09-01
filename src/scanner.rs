@@ -198,12 +198,14 @@ impl<'a> ScanState<'a> {
         // TODO: I need to check for the case where the dot ends the number. I could make that implicitly .0, but that isn't obvious.
         // Doing this properly would require an extra lookahead to see if the next character is a digit.
         // Consuming a character with next() would comsume the . without generating a PERIOD token.
+        // In the meantime, I'm just going to parse the number as an int and skip the . token. This
+        // should change ASAP
         if self.peek() == '.' {
             while self.peek().is_ascii_digit() && !self.is_at_end() {
                 self.next();
             }
             match self.lexeme()?.parse() {
-                Ok(value) => self.contextualize(Token::Float(value)),
+                Ok(value) => self.contextualize(Token::Number(value)),
                 Err(e) => Err(FellowError::ScanError(ScanError {
                     message: e.to_string(),
                     line: self.current_line,
@@ -212,7 +214,7 @@ impl<'a> ScanState<'a> {
             }
         } else {
             match self.lexeme()?.parse() {
-                Ok(value) => self.contextualize(Token::Integer(value)),
+                Ok(value) => self.contextualize(Token::Number(value)),
                 Err(e) => Err(FellowError::ScanError(ScanError {
                     message: e.to_string(),
                     line: self.current_line,
